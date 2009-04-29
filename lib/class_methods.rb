@@ -234,12 +234,14 @@ module ActsAsSolr #:nodoc:
       solr_optimize
       logger.info items_processed > 0 ? "Index for #{self.name} has been rebuilt" : "Nothing to index for #{self.name}"
     end
-  end
-  
-  def full_rebuild_solar_index(batch_size=0, &finder)
-    ActsAsSolr::Post.execute(Solr::Request::Delete.new(:query => "#{self.solr_configuration[:type_field]}:#{self}")) 
-    ActsAsSolr::Post.execute(Solr::Request::Commit.new)
-    rebuild_solr_index(batch_size, &finder)
+
+    #To reindex all elements, first deleting all of them and inserting them after
+    def full_rebuild_solar_index(batch_size=0, &finder)
+      ActsAsSolr::Post.execute(Solr::Request::Delete.new(:query => "#{self.solr_configuration[:type_field]}:#{self}")) 
+      ActsAsSolr::Post.execute(Solr::Request::Commit.new)
+      rebuild_solr_index(batch_size, &finder)
+    end
+
   end
   
 end
