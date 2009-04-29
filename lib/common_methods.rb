@@ -18,6 +18,8 @@ module ActsAsSolr #:nodoc:
             return "d"
           when :range_float
             return "rf"
+          when :range_double
+            return "rd"
           when :range_integer
             return "ri"
           when :facet
@@ -41,7 +43,7 @@ module ActsAsSolr #:nodoc:
           return "false"
         when "s", "t", "d", :date, :string, :text
           return ""
-        when "f", "rf", :float, :range_float
+        when "f", "rf", :float, :range_float, :range_double
           return 0.00
         when "i", "ri", :integer, :range_integer
           return 0

@@ -36,6 +36,7 @@ module ActsAsSolr #:nodoc:
     #                    filters as a regular text field
     #          :range_integer:: Index the field value for integer range queries (ie.:[5 TO 20])
     #          :range_float:: Index the field value for float range queries (ie.:[14.56 TO 19.99])
+    #          :range_double:: Index the field value for double range queries (ie.:[14.56 TO 19.99])
     # 
     #          Setting the field type preserves its original type when indexed
     # 
