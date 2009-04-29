@@ -236,4 +236,10 @@ module ActsAsSolr #:nodoc:
     end
   end
   
+  def full_rebuild_solar_index(batch_size=0, &finder)
+    ActsAsSolr::Post.execute(Solr::Request::Delete.new(:query => "#{self.solr_configuration[:type_field]}:#{self}")) 
+    ActsAsSolr::Post.execute(Solr::Request::Commit.new)
+    rebuild_solr_index(batch_size, &finder)
+  end
+  
 end
