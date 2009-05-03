@@ -23,7 +23,9 @@ class ParserMethodsTest < Test::Unit::TestCase
       setup do
         @results = stub(:results)
         @results.stubs(:total_hits).returns(2)
+        @results.stubs(:total).returns(2)
         @results.stubs(:hits).returns([])
+        @results.stubs(:docs).returns([])
         @results.stubs(:max_score).returns 2.1
         @results.stubs(:data).returns({"responseHeader" => {"QTime" => "10.2"}})
       end
@@ -89,6 +91,7 @@ class ParserMethodsTest < Test::Unit::TestCase
       context "with an empty result set" do
         setup do
           @results.stubs(:total_hits).returns(0)
+          @results.stubs(:total).returns(0)
           @results.stubs(:hits).returns([])
         end
 
@@ -161,7 +164,10 @@ class ParserMethodsTest < Test::Unit::TestCase
         ActsAsSolr::Post.stubs(:execute)
         @parser.stubs(:solr_type_condition).returns "(type:ParserMethodsTest)"
         @parser.solr_configuration = {:primary_key_field => "id"}
-        @parser.configuration = {:solr_fields => nil}
+        @parser.configuration = {:solr_fields => { 
+          :username => {:type => :text},
+          :active => {:type => :integer }
+        } }
       end
     
       should "set the limit and offset" do
@@ -208,7 +214,6 @@ class ParserMethodsTest < Test::Unit::TestCase
       end
     
       should "replace the field types" do
-        @parser.expects(:replace_types).returns(["active_i:1"])
         ActsAsSolr::Post.expects(:execute).with {|request|
           request.to_hash[:q].include?("active_i:1")
         }
@@ -225,7 +230,7 @@ class ParserMethodsTest < Test::Unit::TestCase
       context "with the order option" do
         should "add the order criteria to the query" do
           ActsAsSolr::Post.expects(:execute).with {|request|
-            request.to_hash[:q].include?(";active_t desc")
+            request.to_hash[:q].include?(";active_i desc")
           }
           @parser.parse_query "active:1", :order => "active desc"
         end

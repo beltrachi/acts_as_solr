@@ -1,15 +1,17 @@
 module ActsAsSolr #:nodoc:
+  
   module ParserMethods
+    
     protected    
     
     # Method used by mostly all the ClassMethods when doing a search
     def parse_query(query=nil, options={}, models=nil)
+      options = options.symbolize_keys
       valid_options = [:offset, :limit, :facets, :models, :results_format, :order, :scores, :operator, :include, :lazy]
       query_options = {}
-
       return nil if (query.nil? || query.strip == '')
-
-      raise "Invalid parameters: #{(options.keys - valid_options).join(',')}" unless (options.keys - valid_options).empty?
+      raise "Invalid parameters: #{(options.keys - valid_options).map(&:inspect).join(',')}" unless (options.keys - valid_options).empty?
+      
       begin
         Deprecation.validate_query(options)
         query_options[:start] = options[:offset]
@@ -63,20 +65,26 @@ module ActsAsSolr #:nodoc:
         
         if models.nil?
           # TODO: use a filter query for type, allowing Solr to cache it individually
-          models = "AND #{solr_type_condition}"
+          models = "#{solr_type_condition}"
           field_list = solr_configuration[:primary_key_field]
         else
           field_list = "id"
         end
         
         query_options[:field_list] = [field_list, 'score']
-        query = "(#{query.gsub(/ *: */,"_t:")}) #{models}"
-        order = options[:order].split(/\s*,\s*/).collect{|e| e.gsub(/\s+/,'_t ').gsub(/\bscore_t\b/, 'score')  }.join(',') if options[:order] 
-        query_options[:query] = replace_types([query])[0] # TODO adjust replace_types to work with String or Array  
+        
+        unless query.nil? || query.empty? || query == '*'
+          query = "(#{map_query_to_fields(query)}) AND #{models}"
+        else
+          query = "#{models}"
+        end
+        query_options[:query] = query
 
-        if options[:order]
-          # TODO: set the sort parameter instead of the old ;order. style.
-          query_options[:query] << ';' << replace_types([order], false)[0]
+        logger.debug "SOLR query: #{query.inspect}" if defined? logger
+
+        unless options[:order].blank?
+          order = map_order_to_fields(options[:order])
+          query_options[:query] << ';' << order
         end
         
         ActsAsSolr::Post.execute(Solr::Request::Standard.new(query_options))
@@ -86,37 +94,75 @@ module ActsAsSolr #:nodoc:
     end
     
     def solr_type_condition
-      subclasses.inject("(#{solr_configuration[:type_field]}:#{self.name}") do |condition, subclass|
-        condition << " OR #{solr_configuration[:type_field]}:#{subclass.name}"
+      subclasses.inject("(#{solr_configuration[:type_field]}:#{self.name.gsub ':', '\:'}") do |condition, subclass|
+        condition << " OR #{solr_configuration[:type_field]}:#{subclass.name.gsub ':', '\:'}"
       end << ')'
     end
+   
+    # map index fields to the appropriate lucene_fields
+    # "title:(a fish in my head)" => "title_t:(a fish in my head)"
+    # it should avoid mapping to _sort fields
+    def map_query_to_fields(query)
+      #{query.gsub(/ *: */,"_t:")}
+      query.gsub(/(\w+)\s*:\s*/) do |match| # sets $1 in the block
+        field_name = $1
+        field_name = field_name_to_lucene_field(field_name)
+        "#{field_name}:"
+      end
+    end
     
+    def map_order_to_fields(string)
+      string.split(",").map do |clause|
+        field_name, direction = clause.strip.split(/\s+/)
+        field_name = field_name_to_lucene_field(field_name, :sort) unless field_name == "score"
+        direction ||= "asc"
+        
+        "#{field_name} #{direction.downcase}"
+      end.join(",")
+    end
+      
     # Parses the data returned from Solr
     def parse_results(solr_data, options = {})
+      find_options = options.slice(:include)
       results = {
         :docs => [],
         :total => 0
       }
-      
       configuration = {
         :format => :objects
       }
       results.update(:facets => {'facet_fields' => []}) if options[:facets]
-      return SearchResults.new(results) if (solr_data.nil? || solr_data.total_hits == 0)
+      return SearchResults.new(results) if !solr_data || solr_data.total == 0
       
       configuration.update(options) if options.is_a?(Hash)
 
       ids = solr_data.hits.collect {|doc| doc["#{solr_configuration[:primary_key_field]}"]}.flatten
-      
       result = find_objects(ids, options, configuration)
-      
+
       add_scores(result, solr_data) if configuration[:format] == :objects && options[:scores]
       
+      # added due to change for solr 1.3 ruby return struct for facet_fields is an array not hash
+      # require "ruby-debug"
+      # debugger
+      # if options[:facets] && !solr_data.data['facet_counts']['facet_fields'].empty?
+        # facet_fields = solr_data.data['facet_counts']['facet_fields']
+        # solr_data.data['facet_counts']['facet_fields'] = {}
+        # facet_fields.each do |name, values|
+          # solr_data.data['facet_counts']['facet_fields'][name] = {}
+          # values.length.times do | a |
+            # if a.odd?
+              # solr_data.data['facet_counts']['facet_fields'][name][values[a-1]] = values[a]
+            # else
+              # solr_data.data['facet_counts']['facet_fields'][name][values[a]]
+            # end
+          # end    
+        # end
+      # end
+      
       results.update(:facets => solr_data.data['facet_counts']) if options[:facets]
-      results.update({:docs => result, :total => solr_data.total_hits, :max_score => solr_data.max_score, :query_time => solr_data.data['responseHeader']['QTime']})
+      results.update({:docs => result, :total => solr_data.total, :max_score => solr_data.max_score, :query_time => solr_data.data['responseHeader']['QTime']})
       SearchResults.new(results)
     end
-    
     
     def find_objects(ids, options, configuration)
       result = if configuration[:lazy] && configuration[:format] != :ids
@@ -132,7 +178,7 @@ module ActsAsSolr #:nodoc:
         
       result
     end
-    
+
     # Reorders the instances keeping the order returned from Solr
     def reorder(things, ids)
       ordered_things = Array.new(things.size)
@@ -179,7 +225,7 @@ module ActsAsSolr #:nodoc:
         object.solr_score = score
       end
     end
-    
+
     def scorable_record?(record, doc)
       doc_id = doc["#{solr_configuration[:primary_key_field]}"]
       if doc_id.nil?
@@ -195,6 +241,39 @@ module ActsAsSolr #:nodoc:
       options = [options] unless options.kind_of? Array
       bad_options = options.map {|x| x.to_sym} - valid_other_options
       raise "Invalid option#{'s' if bad_options.size > 1} for faceted date's other param: #{bad_options.join(', ')}. May only be one of :after, :all, :before, :between, :none" if bad_options.size > 0
+    end
+
+    # looks through the configured :solr_fields, and chooses the most appropriate
+    # pass it :sort if you would prefer a :sort_field
+    # or pass it :text if that's your prefered type
+    def field_name_to_solr_field(field_name, favoured_types=nil)
+      favoured_types = Array(favoured_types)
+
+      solr_fields = configuration[:solr_fields].select do |field, options|
+        field.to_s == field_name.to_s
+      end
+      prefered, secondary = solr_fields.partition do |field, options|
+        favoured_types.include?(options[:type])
+      end
+      prefered.first || secondary.first # will return nil if no matches
+    end
+    
+    # takes a normalized field... ie. [:field, {:type => :text}]
+    # gets us the lucene field name "field_t"
+    def solr_field_to_lucene_field(normalized_field)
+      field_name, options = normalized_field
+      field_type = options[:type]
+      "#{field_name}_#{get_solr_field_type(field_type)}"
+    end
+    
+    # "title" => "title_t", or "title_sort"
+    # "score" => "score" -- SPECIAL CASE
+    def field_name_to_lucene_field(field_name, favoured_types=[:string, :text])
+      if normalized_field = field_name_to_solr_field(field_name, favoured_types)
+        solr_field_to_lucene_field(normalized_field)
+      else
+        field_name.to_s
+      end
     end
     
   end

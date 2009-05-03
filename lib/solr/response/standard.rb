@@ -24,6 +24,8 @@ class Solr::Response::Standard < Solr::Response::Ruby
     @response['numFound']
   end
 
+  alias_method :total, :total_hits 
+  
   def start
     @response['start']
   end
