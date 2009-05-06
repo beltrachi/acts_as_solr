@@ -241,6 +241,13 @@ module ActsAsSolr #:nodoc:
       ActsAsSolr::Post.execute(Solr::Request::Commit.new)
       rebuild_solr_index(batch_size, &finder)
     end
+    
+    # Returns the query range to be added to the query
+    def range_query( field_name, startsat, endsat )
+      field = field_name_to_solr_field( field_name )
+      range = [ startsat, endsat ].map{|v| v.respond_to?( :to_solr ) ? v.to_solr : v }
+      map_query_to_fields( "#{field_name}:[#{ range[0] } TO #{ range[1] }]" )
+    end
 
   end
   
