@@ -43,7 +43,7 @@ module ActsAsSolr #:nodoc:
           return "false"
         when "s", "t", "d", :date, :string, :text
           return ""
-        when "f", "rf", :float, :range_float, :range_double
+        when "f", "rf", "rd", :float, :range_float, :range_double
           return 0.00
         when "i", "ri", :integer, :range_integer
           return 0

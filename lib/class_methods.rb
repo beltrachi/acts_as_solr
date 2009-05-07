@@ -245,10 +245,34 @@ module ActsAsSolr #:nodoc:
     # Returns the query range to be added to the query
     def range_query( field_name, startsat, endsat )
       field = field_name_to_solr_field( field_name )
+      if field[1][:sliced]
+        case field[1][:type]
+          when :range_double, "rd"
+            field2 = field.dup
+            field2[1] = field2[1].dup
+            field2[1][:type] = :range_integer
+            field2[1].delete(:sliced)
+            filters = []
+            filters << _range_query( 
+              field_name+"_ri", startsat.ceil, endsat.floor, field2) unless startsat.ceil == endsat.floor
+            filters << _range_query( field_name, startsat, 
+              startsat.ceil, field) unless startsat == startsat.ceil.to_f
+            filters << _range_query( field_name, endsat, 
+              endsat.floor, field ) unless endsat == endsat.floor.to_f
+            "( " + filters.join( " OR " ) + " )"
+        else
+          raise "Sliced field #{field[1][:type]} not supported"
+        end
+      else
+        _range_query( field_name, startsat, endsat, field )
+      end
+    end
+    
+    def _range_query( field_name, startsat, endsat, field )
       range = [ startsat, endsat ].map{|v| v.respond_to?( :to_solr ) ? v.to_solr : v }
       map_query_to_fields( "#{field_name}:[#{ range[0] } TO #{ range[1] }]" )
     end
-
+    
   end
   
 end
