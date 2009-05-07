@@ -260,12 +260,43 @@ module ActsAsSolr #:nodoc:
             filters << _range_query( field_name, endsat, 
               endsat.floor, field ) unless endsat == endsat.floor.to_f
             "( " + filters.join( " OR " ) + " )"
+          when :date, "d"
+            date_range_query( field_name, startsat, endsat, field )
         else
           raise "Sliced field #{field[1][:type]} not supported"
         end
       else
         _range_query( field_name, startsat, endsat, field )
       end
+    end
+    
+    private
+    def date_range_query( field_name, startsat, endsat, field )
+      startsat_day = if startsat == "*" || startsat.blank?
+        startsat
+      else
+        t = (startsat.respond_to?( :utc )? startsat.utc : Time.parse(startsat).utc )
+        pad = ( t.hour== 0 && t.min == 0 && t.sec == 0 ? 0 : 1 )
+        Time.utc( t.year, t.month, t.day + pad).to_solr
+      end
+      endsat_day = if endsat == "*" || endsat.blank?
+        endsat
+      else
+        time = (endsat.respond_to?( :utc )? endsat.utc : Time.parse(endsat).utc )
+        Time.utc( endsat.year, endsat.month, endsat.day ).to_solr
+      end
+      
+      field2 = field.dup
+      field2[1] = field2[1].dup
+      field2[1].delete(:sliced)
+      filters = []
+      filters << _range_query( field_name, startsat, 
+        startsat_day, field) unless startsat == startsat_day
+      filters << _range_query( field_name+"_day_d", startsat_day, 
+        endsat_day, field2) unless startsat_day == endsat_day
+      filters << _range_query( field_name, endsat_day, 
+        endsat, field ) unless endsat == endsat_day
+      "( " + filters.join( " OR " ) + " )"
     end
     
     def _range_query( field_name, startsat, endsat, field )
