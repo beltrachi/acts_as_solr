@@ -253,12 +253,12 @@ module ActsAsSolr #:nodoc:
             field2[1][:type] = :range_integer
             field2[1].delete(:sliced)
             filters = []
-            filters << _range_query( 
-              field_name+"_ri", startsat.ceil, endsat.floor, field2) unless startsat.ceil == endsat.floor
             filters << _range_query( field_name, startsat, 
               startsat.ceil, field) unless startsat == startsat.ceil.to_f
-            filters << _range_query( field_name, endsat, 
-              endsat.floor, field ) unless endsat == endsat.floor.to_f
+            filters << _range_query( 
+              field_name+"_ri", startsat.ceil, endsat.floor, field2) unless startsat.ceil == endsat.floor
+            filters << _range_query( field_name, endsat.floor, 
+              endsat, field ) unless endsat == endsat.floor.to_f
             "( " + filters.join( " OR " ) + " )"
           when :date, "d"
             date_range_query( field_name, startsat, endsat, field )
@@ -272,30 +272,44 @@ module ActsAsSolr #:nodoc:
     
     private
     def date_range_query( field_name, startsat, endsat, field )
+      #Range not sliceable
+      if startsat != "*" && endsat != "*"
+        if startsat > endsat || startsat + 1.day > endsat
+          return _range_query( field_name, startsat.utc.iso8601, endsat.utc.iso8601, field )
+        end
+      end
+      
       startsat_day = if startsat == "*" || startsat.blank?
         startsat
       else
         t = (startsat.respond_to?( :utc )? startsat.utc : Time.parse(startsat).utc )
         pad = ( t.hour== 0 && t.min == 0 && t.sec == 0 ? 0 : 1 )
-        Time.utc( t.year, t.month, t.day + pad).to_solr
+        Time.utc( t.year, t.month, t.day + pad)
       end
       endsat_day = if endsat == "*" || endsat.blank?
         endsat
       else
         time = (endsat.respond_to?( :utc )? endsat.utc : Time.parse(endsat).utc )
-        Time.utc( endsat.year, endsat.month, endsat.day ).to_solr
+        Time.utc( endsat.year, endsat.month, endsat.day )
+      end
+      values = [ startsat, startsat_day, endsat_day, endsat ].collect do |v|
+        if v == "*"
+          v
+        else
+          v.respond_to?( :utc )? v.utc.iso8601 : v
+        end
       end
       
       field2 = field.dup
       field2[1] = field2[1].dup
       field2[1].delete(:sliced)
       filters = []
-      filters << _range_query( field_name, startsat, 
-        startsat_day, field) unless startsat == startsat_day
-      filters << _range_query( field_name+"_day_d", startsat_day, 
-        endsat_day, field2) unless startsat_day == endsat_day
-      filters << _range_query( field_name, endsat_day, 
-        endsat, field ) unless endsat == endsat_day
+      filters << _range_query( field_name, values[0], 
+        values[1], field) unless values[0] == values[1]
+      filters << _range_query( field_name+"_day_d", values[1], 
+        values[2], field2) unless values[1] == values[2]
+      filters << _range_query( field_name, values[2], 
+        values[3], field ) unless values[2] == values[3]
       "( " + filters.join( " OR " ) + " )"
     end
     

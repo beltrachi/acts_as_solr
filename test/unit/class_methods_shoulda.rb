@@ -19,6 +19,10 @@ class User
   def self.primary_key
     "id"
   end
+  
+  def created_at
+    Time.now
+  end
 end
 
 class ClassMethodsTest < Test::Unit::TestCase
@@ -85,4 +89,87 @@ class ClassMethodsTest < Test::Unit::TestCase
       end
     end
   end
+  
+  context "when searching range_double ranges" do
+    setup do
+      stubs(:name).returns("User")
+      @solr_configuration = {:type_field => "type_t", :primary_key_field => "id",}
+      stubs(:configuration).returns( {:solr_fields => { :created_at => { :type => :date, :sliced => 1 } } } )
+    end
+    
+    should "include the type field in the query" do
+      result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-12T12:00:00Z") )
+      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
+      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
+    end
+
+    should "not include the first part if its empty" do
+      result = range_query( "created_at" , Time.parse("2009-01-02T00:00:00Z"), Time.parse("2009-01-12T12:00:00Z") )
+      assert !result.include?("[2009-01-02T00:00:00Z TO 2009-01-02T00:00:00Z]")
+      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
+      assert result.scan(/created_at/).size == 2
+    end
+
+    should "not include the last part if its empty" do
+      result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-12T00:00:00Z") )
+      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
+      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert !result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
+      assert result.scan(/created_at/).size == 2
+    end
+
+    should "not include the first and the last part if its empty" do
+      result = range_query( "created_at" , Time.parse("2009-01-01T00:00:00Z"), Time.parse("2009-01-12T00:00:00Z") )
+      assert !result.include?("[2009-01-01T00:00:00Z TO 2009-01-01T00:00:00Z]")
+      assert result.include?("created_at_day_d:[2009-01-01T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert !result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert result.scan(/created_at/).size == 1
+    end
+
+    should "not do the dayquery when the range is lower than a whole day" do
+      result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-01T13:00:00Z") )
+      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-01T13:00:00Z]")
+      assert !result.include?("created_at_day")
+      assert result.scan(/created_at/).size == 1
+    end
+
+    should "not include the day query when its not needed" do
+      result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-02T13:00:00Z") )
+      assert !result.include?("created_at_day_d")
+      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
+      assert result.include?("[2009-01-02T00:00:00Z TO 2009-01-02T13:00:00Z]")
+      assert result.scan(/created_at/).size == 2
+    end
+
+    context "on open ranges" do
+      should " open end " do
+        result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), "*" )
+        assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
+        assert result.include?("[2009-01-02T00:00:00Z TO *]")
+        assert result.scan(/created_at/).size == 2
+      end
+
+      should " open start " do
+        result = range_query( "created_at" , "*", Time.parse("2009-01-01T12:00:00Z") )
+        assert result.include?("[2009-01-01T00:00:00Z TO 2009-01-01T12:00:00Z]")
+        assert result.include?("created_at_day_d:[* TO 2009-01-01T00:00:00Z]")
+        assert result.scan(/created_at/).size == 2
+      end
+
+      should " open start day sharp" do
+        result = range_query( "created_at" , "*", Time.parse("2009-01-01T00:00:00Z") )
+        assert result.include?("created_at_day_d:[* TO 2009-01-01T00:00:00Z]")
+        assert result.scan(/created_at/).size == 1
+      end
+
+      should " open end day sharp" do
+        result = range_query( "created_at" , Time.parse("2009-01-01T00:00:00Z"), "*" )
+        assert result.include?("created_at_day_d:[2009-01-01T00:00:00Z TO *]")
+        assert result.scan(/created_at/).size == 1
+      end
+    end
+  end
+  
 end
