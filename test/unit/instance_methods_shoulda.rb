@@ -320,6 +320,33 @@ class InstanceMethodsTest < Test::Unit::TestCase
             assert_equal 1, fields.size
           end
         end
+        
+        context "when a date sliced field configured" do
+          setup do
+            @instance.configuration[:solr_fields].merge!( 
+              { :created_at => { :type => :date, :sliced => 1 } }  )
+            @instance.stubs(:get_solr_field_type).with(:date).returns('d')
+            @instance.stubs(:get_solr_field_type).with("d").returns('d')
+            @instance.stubs(:get_solr_field_type).with(nil).returns('t')
+            @instance.stubs(:get_solr_field_type).with("t").returns('t')
+          end
+          
+          should "save the date field and its day field" do
+            @instance.stubs(:created_at_for_solr).returns( 
+              Time.parse("2009-01-01T12:00:00Z").iso8601 )
+            doc = @instance.to_solr_doc
+            assert_equal doc[:created_at_day_d], "2009-01-01T00:00:00Z"
+            assert_equal doc[:created_at_d], "2009-01-01T12:00:00Z"
+          end
+          
+          should "date is nill so no field saved" do
+            @instance.stubs(:created_at_for_solr).returns(nil)
+            @instance.stubs(:set_value_if_nil).returns("")
+            doc = @instance.to_solr_doc
+            assert_nil doc[:created_at_d]
+            assert_nil doc[:created_at_day_d]
+          end
+        end
       end
     end
   end
