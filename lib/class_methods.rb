@@ -248,18 +248,7 @@ module ActsAsSolr #:nodoc:
       if field[1][:sliced]
         case field[1][:type]
           when :range_double, "rd"
-            field2 = field.dup
-            field2[1] = field2[1].dup
-            field2[1][:type] = :range_integer
-            field2[1].delete(:sliced)
-            filters = []
-            filters << _range_query( field_name, startsat, 
-              startsat.ceil, field) unless startsat == startsat.ceil.to_f
-            filters << _range_query( 
-              field_name+"_ri", startsat.ceil, endsat.floor, field2) unless startsat.ceil == endsat.floor
-            filters << _range_query( field_name, endsat.floor, 
-              endsat, field ) unless endsat == endsat.floor.to_f
-            "( " + filters.join( " OR " ) + " )"
+            double_range_query( field_name, startsat, endsat, field )
           when :date, "d"
             date_range_query( field_name, startsat, endsat, field )
         else
@@ -268,6 +257,37 @@ module ActsAsSolr #:nodoc:
       else
         _range_query( field_name, startsat, endsat, field )
       end
+    end
+    
+    private
+    def double_range_query( field_name, startsat, endsat, field )
+      if startsat != "*" && endsat != "*"
+        if startsat > endsat
+          return double_range_query( field_name, endsat, startsat, field )
+        end
+        if startsat.ceil >= endsat.floor
+          #The search has no whole int part so usual range query can be used
+          return _range_query( field_name, startsat, endsat, field )
+        end
+      end
+      v = [ startsat, 
+        (startsat.respond_to?( :ceil )? startsat.ceil : startsat ), 
+        (endsat.respond_to?( :floor )? endsat.floor : endsat ), 
+        endsat ]
+      field2 = field.dup
+      field2[1] = field2[1].dup
+      field2[1][:type] = :range_integer
+      field2[1].delete(:sliced)
+      filters = []
+      filters << _range_query( field_name, v[0],  
+        v[1], field) unless v[0] == v[1] || v[0] == v[1].to_f
+      if v[1] == "*" || v[2] == "*" || v[1] < v[2]
+        filters << _range_query( 
+          field_name+"_ri", v[1], v[2], field2)
+      end
+      filters << _range_query( field_name, v[2], 
+        v[3], field ) unless v[2] == v[3] || v[2].to_f == v[3]
+      "( " + filters.join( " OR " ) + " )"
     end
     
     private

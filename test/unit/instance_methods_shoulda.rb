@@ -347,6 +347,48 @@ class InstanceMethodsTest < Test::Unit::TestCase
             assert_nil doc[:created_at_day_d]
           end
         end
+
+        context "when a range double sliced field configured" do
+          setup do
+            @instance.configuration[:solr_fields].merge!( 
+              { :lat => { :type => :range_double, :sliced => 1 } }  )
+            @instance.stubs(:get_solr_field_type).with(:range_double).returns('rd')
+            @instance.stubs(:get_solr_field_type).with("rd").returns('rd')
+            @instance.stubs(:get_solr_field_type).with(:range_integer).returns('ri')
+            @instance.stubs(:get_solr_field_type).with("ri").returns('ri')
+            @instance.stubs(:get_solr_field_type).with(nil).returns('t')
+            @instance.stubs(:get_solr_field_type).with("t").returns('t')
+          end
+          
+          should "save the double field and its int field" do
+            @instance.stubs(:lat_for_solr).returns( 12.1234567890 )
+            doc = @instance.to_solr_doc
+            assert_equal doc[:lat_rd], "12.123456789"
+            assert_equal doc[:lat_ri], "12"
+          end
+          
+          should "save the double field and its int truncated not rounded field" do
+            @instance.stubs(:lat_for_solr).returns( 12.999999 )
+            doc = @instance.to_solr_doc
+            assert_equal doc[:lat_rd], "12.999999"
+            assert_equal doc[:lat_ri], "12"
+          end
+          
+          should "save the negative double field and its int field" do
+            @instance.stubs(:lat_for_solr).returns( -12.1234567890 )
+            doc = @instance.to_solr_doc
+            assert_equal doc[:lat_rd], "-12.123456789"
+            assert_equal doc[:lat_ri], "-12"
+          end
+          
+          should "lat is nill so no field saved" do
+            @instance.stubs(:lat_for_solr).returns(nil)
+            @instance.stubs(:set_value_if_nil).returns("")
+            doc = @instance.to_solr_doc
+            assert_nil doc[:lat_rd]
+            assert_nil doc[:lat_ri]
+          end
+        end
       end
     end
   end

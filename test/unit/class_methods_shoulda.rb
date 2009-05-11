@@ -90,7 +90,7 @@ class ClassMethodsTest < Test::Unit::TestCase
     end
   end
   
-  context "when searching range_double ranges" do
+  context "when searching date ranges" do
     setup do
       stubs(:name).returns("User")
       @solr_configuration = {:type_field => "type_t", :primary_key_field => "id",}
@@ -170,6 +170,87 @@ class ClassMethodsTest < Test::Unit::TestCase
         assert result.scan(/created_at/).size == 1
       end
     end
+  end
+
+  context "when searching range_double ranges" do
+    setup do
+      stubs(:name).returns("User")
+      @solr_configuration = {:type_field => "type_t", :primary_key_field => "id",}
+      stubs(:configuration).returns( {:solr_fields => { :lat => { :type => :range_double, :sliced => 1 } } } )
+    end
+    
+    should "query 3 fields separated by or" do
+      result = range_query( "lat" , 1.1 , 10.3 )
+      assert result.include?("lat_rd:[1.1 TO 2]")
+      assert result.include?("lat_ri:[2 TO 10]")
+      assert result.include?("lat_rd:[10 TO 10.3]")
+      assert result.scan(/lat_rd/).size == 2
+      assert result.scan(/ OR /).size == 2
+    end
+    
+    should "query starts with int" do
+      result = range_query( "lat" , 1.0 , 10.3 )
+      assert result.include?("lat_ri:[1 TO 10]")
+      assert result.include?("lat_rd:[10 TO 10.3]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 1
+    end
+    
+    should "query ends with int" do
+      result = range_query( "lat" , 1.8 , 10 )
+      assert result.include?("lat_rd:[1.8 TO 2]")
+      assert result.include?("lat_ri:[2 TO 10]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 1
+    end
+    
+    should "query no range" do
+      result = range_query( "lat" , 1.8 , 1.8 )
+      assert result.include?("lat_rd:[1.8 TO 1.8]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 0
+    end
+
+    should "query no int part used" do
+      result = range_query( "lat" , 1.8 , 1.9 )
+      assert result.include?("lat_rd:[1.8 TO 1.9]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 0
+    end
+
+    should "query reverse range is reverted" do
+      result = range_query( "lat" , 1.7 , 1.2 )
+      assert result.include?("lat_rd:[1.2 TO 1.7]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 0
+    end
+
+    should "reverse the range and work as ususal" do
+      result = range_query( "lat" , 10.7 , 1.2 )
+      assert result.include?("lat_rd:[1.2 TO 2]")
+      assert result.include?("lat_rd:[10 TO 10.7]")
+      assert result.include?("lat_ri:[2 TO 10]")
+      assert result.scan(/lat_rd/).size == 2
+      assert result.scan(/ OR /).size == 2
+    end
+    
+    should "work with open end range" do
+      result = range_query( "lat" , 10.7 , "*" )
+      assert result.include?("lat_rd:[10.7 TO 11]")
+      assert result.include?("lat_ri:[11 TO *]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 1
+    end
+
+    should "work with open start range" do
+      result = range_query( "lat" , "*", 10.7 )
+      assert result.include?("lat_ri:[* TO 10]")
+      assert result.include?("lat_rd:[10 TO 10.7]")
+      assert result.scan(/lat_rd/).size == 1
+      assert result.scan(/ OR /).size == 1
+    end
+    
+    
   end
   
 end
