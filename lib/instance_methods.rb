@@ -92,13 +92,19 @@ module ActsAsSolr #:nodoc:
     def add_slices_to_doc( field_type, options, field_name, doc, value, solr_name )
       case field_type
         when :range_double, "rd"
-          raise "Only sliced 1 supported" if options[:sliced] > 1
+          raise "Only sliced 1 supported" if options[:sliced] > 2
           #Store the int part in a new field
           newop = options.dup
           newop.delete( :sliced )
           newop[:type] = :range_integer
           newvalue = ( !value.blank? ? value.to_i : value)
           add_field_to_doc( "ri", newop, field_name, doc, newvalue, solr_name )
+          if options[:sliced] > 1 && !value.blank?
+            newop[:type] = :range_double
+            add_field_to_doc( "rd", newop, field_name, doc, 
+              ((value * 10000).to_i / 10000.0), 
+              (solr_name.to_s+"_4d").to_sym )
+          end
         when :date, "d"
           raise "Only sliced 1 supported" if options[:sliced] > 1
           #Store the day part in a new field without the time
@@ -110,7 +116,8 @@ module ActsAsSolr #:nodoc:
           else
             value
           end
-          add_field_to_doc( "d", newop, (field_name.to_s+"_day").to_sym, doc, newvalue, (solr_name.to_s+"_day").to_sym )
+          add_field_to_doc( "d", newop, (field_name.to_s+"_day").to_sym, doc, 
+            newvalue, (solr_name.to_s+"_day").to_sym )
       else
         raise "Slice not supported: #{field_type}"
       end
