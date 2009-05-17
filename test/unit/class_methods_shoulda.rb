@@ -27,9 +27,19 @@ end
 
 class ClassMethodsTest < Test::Unit::TestCase
   include ActsAsSolr::ClassMethods
+  include ActsAsSolr::SliceMethods
   
   def solr_configuration
     @solr_configuration ||= {:type_field => "type_t", :primary_key_field => "id"}
+  end
+  
+  def assert_include( expect, result, message = "")
+    assertion = if expect.is_a? Regexp
+      result.match expect
+    else
+      result.include?( expect )
+    end
+    assert assertion, "The string [ #{result} ] does not contain [ #{expect} ]"
   end
   
   context "when multi-searching" do
@@ -99,23 +109,23 @@ class ClassMethodsTest < Test::Unit::TestCase
     
     should "include the type field in the query" do
       result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-12T12:00:00Z") )
-      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
-      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
-      assert result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
+      assert_include( "[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]", result)
+      assert_include( "created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]", result)
+      assert_include( "[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]", result)
     end
 
     should "not include the first part if its empty" do
       result = range_query( "created_at" , Time.parse("2009-01-02T00:00:00Z"), Time.parse("2009-01-12T12:00:00Z") )
       assert !result.include?("[2009-01-02T00:00:00Z TO 2009-01-02T00:00:00Z]")
-      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
-      assert result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
+      assert_include( "created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]", result)
+      assert_include( "[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]", result)
       assert result.scan(/created_at/).size == 2
     end
 
     should "not include the last part if its empty" do
       result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-12T00:00:00Z") )
-      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
-      assert result.include?("created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert_include( "[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]", result)
+      assert_include( "created_at_day_d:[2009-01-02T00:00:00Z TO 2009-01-12T00:00:00Z]", result)
       assert !result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T12:00:00Z]")
       assert result.scan(/created_at/).size == 2
     end
@@ -123,14 +133,14 @@ class ClassMethodsTest < Test::Unit::TestCase
     should "not include the first and the last part if its empty" do
       result = range_query( "created_at" , Time.parse("2009-01-01T00:00:00Z"), Time.parse("2009-01-12T00:00:00Z") )
       assert !result.include?("[2009-01-01T00:00:00Z TO 2009-01-01T00:00:00Z]")
-      assert result.include?("created_at_day_d:[2009-01-01T00:00:00Z TO 2009-01-12T00:00:00Z]")
+      assert_include( "created_at_day_d:[2009-01-01T00:00:00Z TO 2009-01-12T00:00:00Z]", result)
       assert !result.include?("[2009-01-12T00:00:00Z TO 2009-01-12T00:00:00Z]")
       assert result.scan(/created_at/).size == 1
     end
 
     should "not do the dayquery when the range is lower than a whole day" do
       result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-01T13:00:00Z") )
-      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-01T13:00:00Z]")
+      assert_include( "[2009-01-01T12:00:00Z TO 2009-01-01T13:00:00Z]", result)
       assert !result.include?("created_at_day")
       assert result.scan(/created_at/).size == 1
     end
@@ -138,35 +148,35 @@ class ClassMethodsTest < Test::Unit::TestCase
     should "not include the day query when its not needed" do
       result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), Time.parse("2009-01-02T13:00:00Z") )
       assert !result.include?("created_at_day_d")
-      assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
-      assert result.include?("[2009-01-02T00:00:00Z TO 2009-01-02T13:00:00Z]")
+      assert_include( "[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]", result)
+      assert_include( "[2009-01-02T00:00:00Z TO 2009-01-02T13:00:00Z]", result)
       assert result.scan(/created_at/).size == 2
     end
 
     context "on open ranges" do
       should " open end " do
         result = range_query( "created_at" , Time.parse("2009-01-01T12:00:00Z"), "*" )
-        assert result.include?("[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]")
-        assert result.include?("[2009-01-02T00:00:00Z TO *]")
+        assert_include( "[2009-01-01T12:00:00Z TO 2009-01-02T00:00:00Z]", result)
+        assert_include( "[2009-01-02T00:00:00Z TO *]", result)
         assert result.scan(/created_at/).size == 2
       end
 
       should " open start " do
         result = range_query( "created_at" , "*", Time.parse("2009-01-01T12:00:00Z") )
-        assert result.include?("[2009-01-01T00:00:00Z TO 2009-01-01T12:00:00Z]")
-        assert result.include?("created_at_day_d:[* TO 2009-01-01T00:00:00Z]")
+        assert_include( "[2009-01-01T00:00:00Z TO 2009-01-01T12:00:00Z]", result)
+        assert_include( "created_at_day_d:[* TO 2009-01-01T00:00:00Z]", result)
         assert result.scan(/created_at/).size == 2
       end
 
       should " open start day sharp" do
         result = range_query( "created_at" , "*", Time.parse("2009-01-01T00:00:00Z") )
-        assert result.include?("created_at_day_d:[* TO 2009-01-01T00:00:00Z]")
+        assert_include( "created_at_day_d:[* TO 2009-01-01T00:00:00Z]", result)
         assert result.scan(/created_at/).size == 1
       end
 
       should " open end day sharp" do
         result = range_query( "created_at" , Time.parse("2009-01-01T00:00:00Z"), "*" )
-        assert result.include?("created_at_day_d:[2009-01-01T00:00:00Z TO *]")
+        assert_include( "created_at_day_d:[2009-01-01T00:00:00Z TO *]", result)
         assert result.scan(/created_at/).size == 1
       end
     end
@@ -181,76 +191,162 @@ class ClassMethodsTest < Test::Unit::TestCase
     
     should "query 3 fields separated by or" do
       result = range_query( "lat" , 1.1 , 10.3 )
-      assert result.include?("lat_rd:[1.1 TO 2]")
-      assert result.include?("lat_ri:[2 TO 10]")
-      assert result.include?("lat_rd:[10 TO 10.3]")
+      assert_include( "lat_rd:[1.1 TO 2]", result)
+      assert_include( "lat_ri:[2 TO 9]", result)
+      assert_include( "lat_rd:[10 TO 10.3]", result)
       assert result.scan(/lat_rd/).size == 2
       assert result.scan(/ OR /).size == 2
     end
     
     should "query starts with int" do
       result = range_query( "lat" , 1.0 , 10.3 )
-      assert result.include?("lat_ri:[1 TO 10]")
-      assert result.include?("lat_rd:[10 TO 10.3]")
+      assert_include( "lat_ri:[1 TO 9]", result)
+      assert_include( "lat_rd:[10 TO 10.3]", result)
       assert result.scan(/lat_rd/).size == 1
       assert result.scan(/ OR /).size == 1
     end
     
     should "query ends with int" do
       result = range_query( "lat" , 1.8 , 10 )
-      assert result.include?("lat_rd:[1.8 TO 2]")
-      assert result.include?("lat_ri:[2 TO 10]")
-      assert result.scan(/lat_rd/).size == 1
-      assert result.scan(/ OR /).size == 1
+      assert_include( "lat_rd:[1.8 TO 2]", result) #
+      assert_include( "lat_ri:[2 TO 9]", result) # gets 2.00 to 9.999...
+      assert_include( "lat_rd:[10 TO 10]", result) # gets 10.000... to 10.000
+      assert result.scan(/lat_/).size == 3
+      assert result.scan(/ OR /).size == 2
     end
     
     should "query no range" do
       result = range_query( "lat" , 1.8 , 1.8 )
-      assert result.include?("lat_rd:[1.8 TO 1.8]")
+      assert_include( "lat_rd:[1.8 TO 1.8]", result)
       assert result.scan(/lat_rd/).size == 1
       assert result.scan(/ OR /).size == 0
     end
 
     should "query no int part used" do
       result = range_query( "lat" , 1.8 , 1.9 )
-      assert result.include?("lat_rd:[1.8 TO 1.9]")
+      assert_include( "lat_rd:[1.8 TO 1.9]", result)
       assert result.scan(/lat_rd/).size == 1
       assert result.scan(/ OR /).size == 0
     end
 
     should "query reverse range is reverted" do
       result = range_query( "lat" , 1.7 , 1.2 )
-      assert result.include?("lat_rd:[1.2 TO 1.7]")
+      assert_include( "lat_rd:[1.2 TO 1.7]", result)
       assert result.scan(/lat_rd/).size == 1
       assert result.scan(/ OR /).size == 0
     end
 
     should "reverse the range and work as ususal" do
       result = range_query( "lat" , 10.7 , 1.2 )
-      assert result.include?("lat_rd:[1.2 TO 2]")
-      assert result.include?("lat_rd:[10 TO 10.7]")
-      assert result.include?("lat_ri:[2 TO 10]")
-      assert result.scan(/lat_rd/).size == 2
+      assert_include( "lat_rd:[1.2 TO 2]", result)
+      assert_include( "lat_ri:[2 TO 9]", result)
+      assert_include( "lat_rd:[10 TO 10.7]", result)
+      assert result.scan(/lat_/).size == 3
       assert result.scan(/ OR /).size == 2
     end
     
     should "work with open end range" do
       result = range_query( "lat" , 10.7 , "*" )
-      assert result.include?("lat_rd:[10.7 TO 11]")
-      assert result.include?("lat_ri:[11 TO *]")
-      assert result.scan(/lat_rd/).size == 1
+      assert_include( "lat_rd:[10.7 TO 11]", result)
+      assert_include( "lat_ri:[11 TO *]", result)
+      assert result.scan(/lat_/).size == 2
       assert result.scan(/ OR /).size == 1
     end
 
     should "work with open start range" do
       result = range_query( "lat" , "*", 10.7 )
-      assert result.include?("lat_ri:[* TO 10]")
-      assert result.include?("lat_rd:[10 TO 10.7]")
+      assert_include( "lat_ri:[* TO 9]", result)
+      assert_include( "lat_rd:[10 TO 10.7]", result)
       assert result.scan(/lat_rd/).size == 1
       assert result.scan(/ OR /).size == 1
     end
     
-    
+    context "sliced twice" do
+      setup do
+        stubs(:configuration).returns( {:solr_fields => { :lat => { :type => :range_double, :sliced => 2 } } } )
+      end
+        
+      should "query usual range" do
+        result = range_query( "lat" , 1.123456 , 10.345678 )
+        assert_include( "lat_rd:[1.123456 TO 1.1235]", result) # 1.123456 to 123500...
+        assert_include( "lat_4d_rd:[1.1235 TO 1.9999]", result) # gets 1.1235000 to 2.000099...
+        assert_include( "lat_ri:[2 TO 9]", result) #gets 2.000... to 9.99999
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.3455\]/, result) # gets 10.000... to 10.3455999..
+        assert_include( "lat_rd:[10.3456 TO 10.345678]", result)
+        assert result.scan(/lat_/).size == 5
+        assert result.scan(/ OR /).size == 4
+      end
+      
+      should "query starts with int and end is not enough precise" do
+        result = range_query( "lat" , 1.0 , 10.3 )
+        assert_include( "lat_ri:[1 TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.2999\]/, result)
+        assert_include( "lat_rd:[10.3 TO 10.3]", result)
+        assert result.scan(/lat_/).size == 3
+        assert result.scan(/ OR /).size == 2
+      end
+      
+      should "query ends with int" do
+        result = range_query( "lat" , 1.8 , 10 )
+        #Don't use lat_rd at start 'cause the start does not have more than 4 decimals
+        assert_include( "lat_4d_rd:[1.8 TO 1.9999]", result) #gets from 1.80 to 2.000099999...
+        assert_include( "lat_ri:[2 TO 9]", result) # gets from 3.0 to 9.9999...
+         # a Needed strange range to include the value 10
+        assert_include( "lat_rd:[10.0 TO 10.0]", result)
+        assert result.scan(/lat_/).size == 3, result
+        assert result.scan(/ OR /).size == 2, result
+      end
+      
+      should "query no range" do
+        result = range_query( "lat" , 1.8 , 1.8 )
+        assert_include( "lat_rd:[1.8 TO 1.8]", result)
+        assert result.scan(/lat_rd/).size == 1
+        assert result.scan(/ OR /).size == 0
+      end
+  
+      should "query no int part used" do
+        result = range_query( "lat" , 1.8 , 1.9 )
+        assert_include( "lat_4d_rd:[1.8 TO 1.8999]", result)
+        assert_include( "lat_rd:[1.9 TO 1.9]", result)
+        assert result.scan(/lat_/).size == 2
+        assert result.scan(/ OR /).size == 1
+      end
+  
+      should "query reverse range is reverted" do
+        result = range_query( "lat" , 1.7 , 1.2 )
+        assert_include( "lat_4d_rd:[1.2 TO 1.6999]", result)
+        assert_include( "lat_rd:[1.7 TO 1.7]", result)
+        assert result.scan(/lat_/).size == 2
+        assert result.scan(/ OR /).size == 1
+      end
+  
+      should "reverse the range and work as ususal" do
+        result = range_query( "lat" , 10.7 , 1.2 )
+        assert_include( "lat_4d_rd:[1.2 TO 1.9999]", result)
+        assert_include( "lat_ri:[2 TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.6999\]/, result)
+        assert_include( "lat_rd:[10.7 TO 10.7]", result)
+        assert result.scan(/lat_/).size == 4
+        assert result.scan(/ OR /).size == 3
+      end
+      
+      should "work with open end range" do
+        result = range_query( "lat" , 10.7 , "*" )
+        assert_include( "lat_4d_rd:[10.7 TO 10.9999]", result)
+        assert_include( "lat_ri:[11 TO *]", result)
+        assert result.scan(/lat_/).size == 2, result
+        assert result.scan(/ OR /).size == 1, result
+      end
+  
+      should "work with open start range" do
+        result = range_query( "lat" , "*", 10.7 )
+        assert_include("lat_ri:[* TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(.0+)? TO 10\.6999\]/, result)
+        assert_include( "lat_rd:[10.7 TO 10.7]", result)
+        assert result.scan(/lat_/).size == 3
+        assert result.scan(/ OR /).size == 2
+      end
+    end      
   end
   
 end

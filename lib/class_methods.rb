@@ -1,11 +1,13 @@
 require File.dirname(__FILE__) + '/common_methods'
 require File.dirname(__FILE__) + '/parser_methods'
+require File.dirname(__FILE__) + '/slice_methods'
 
 module ActsAsSolr #:nodoc:
 
   module ClassMethods
     include CommonMethods
     include ParserMethods
+    include SliceMethods
     
     # Finds instances of a model. Terms are ANDed by default, can be overwritten 
     # by using OR between terms
@@ -242,101 +244,6 @@ module ActsAsSolr #:nodoc:
       rebuild_solr_index(batch_size, &finder)
     end
     
-    # Returns the query range to be added to the query
-    def range_query( field_name, startsat, endsat )
-      field = field_name_to_solr_field( field_name )
-      if field[1][:sliced]
-        case field[1][:type]
-          when :range_double, "rd"
-            double_range_query( field_name, startsat, endsat, field )
-          when :date, "d"
-            date_range_query( field_name, startsat, endsat, field )
-        else
-          raise "Sliced field #{field[1][:type]} not supported"
-        end
-      else
-        _range_query( field_name, startsat, endsat, field )
-      end
-    end
-    
-    private
-    def double_range_query( field_name, startsat, endsat, field )
-      if startsat != "*" && endsat != "*"
-        if startsat > endsat
-          return double_range_query( field_name, endsat, startsat, field )
-        end
-        if startsat.ceil >= endsat.floor
-          #The search has no whole int part so usual range query can be used
-          return _range_query( field_name, startsat, endsat, field )
-        end
-      end
-      v = [ startsat, 
-        (startsat.respond_to?( :ceil )? startsat.ceil : startsat ), 
-        (endsat.respond_to?( :floor )? endsat.floor : endsat ), 
-        endsat ]
-      field2 = field.dup
-      field2[1] = field2[1].dup
-      field2[1][:type] = :range_integer
-      field2[1].delete(:sliced)
-      filters = []
-      filters << _range_query( field_name, v[0],  
-        v[1], field) unless v[0] == v[1] || v[0] == v[1].to_f
-      if v[1] == "*" || v[2] == "*" || v[1] < v[2]
-        filters << _range_query( 
-          field_name+"_ri", v[1], v[2], field2)
-      end
-      filters << _range_query( field_name, v[2], 
-        v[3], field ) unless v[2] == v[3] || v[2].to_f == v[3]
-      "( " + filters.join( " OR " ) + " )"
-    end
-    
-    private
-    def date_range_query( field_name, startsat, endsat, field )
-      #Range not sliceable
-      if startsat != "*" && endsat != "*"
-        if startsat > endsat || startsat + 1.day > endsat
-          return _range_query( field_name, startsat.utc.iso8601, endsat.utc.iso8601, field )
-        end
-      end
-      
-      startsat_day = if startsat == "*" || startsat.blank?
-        startsat
-      else
-        t = (startsat.respond_to?( :utc )? startsat.utc : Time.parse(startsat).utc )
-        pad = ( t.hour== 0 && t.min == 0 && t.sec == 0 ? 0 : 1 )
-        Time.utc( t.year, t.month, t.day + pad)
-      end
-      endsat_day = if endsat == "*" || endsat.blank?
-        endsat
-      else
-        time = (endsat.respond_to?( :utc )? endsat.utc : Time.parse(endsat).utc )
-        Time.utc( endsat.year, endsat.month, endsat.day )
-      end
-      values = [ startsat, startsat_day, endsat_day, endsat ].collect do |v|
-        if v == "*"
-          v
-        else
-          v.respond_to?( :utc )? v.utc.iso8601 : v
-        end
-      end
-      
-      field2 = field.dup
-      field2[1] = field2[1].dup
-      field2[1].delete(:sliced)
-      filters = []
-      filters << _range_query( field_name, values[0], 
-        values[1], field) unless values[0] == values[1]
-      filters << _range_query( field_name+"_day_d", values[1], 
-        values[2], field2) unless values[1] == values[2]
-      filters << _range_query( field_name, values[2], 
-        values[3], field ) unless values[2] == values[3]
-      "( " + filters.join( " OR " ) + " )"
-    end
-    
-    def _range_query( field_name, startsat, endsat, field )
-      range = [ startsat, endsat ].map{|v| v.respond_to?( :to_solr ) ? v.to_solr : v }
-      map_query_to_fields( "#{field_name}:[#{ range[0] } TO #{ range[1] }]" )
-    end
     
   end
   
