@@ -144,9 +144,7 @@ module ActsAsSolr #:nodoc:
         [ :all, field, field_name ] ]
       ranges = [ range ]
       original_range = range
-      puts "INIT:" + ranges.inspect
       while ranges.size > 0 do
-        puts ranges.inspect + " <----------------"
         ranges_it = ranges.dup
         ranges_it.each_with_index do |range, idx|
           sliced = false
@@ -154,16 +152,12 @@ module ActsAsSolr #:nodoc:
             unless sliced
               # See if the range have some parts that can be eaten by this dec
               if range.has_a_part_of( dec ) then
-              puts "COVERED #{dec}:" + range.range_covered_by_decimals( dec ).inspect
                 rc = range.range_covered_by_decimals( dec )
-                puts "RANGE THAT SUBSTRACTS: #{rc} from #{range}\n"
                 ranges.delete( range )
                 ranges2 = range.substract rc
-                puts "Generates: " + ranges2.inspect
                 ranges += ranges2.compact
                 offset = 0
                 offset = 1.0 / 10**dec unless dec == :all
-                puts offset
                 if dec == 0
                   filters << _range_query( fn, rc.first.to_i, (rc.last - offset).to_i, f )
                 else
@@ -178,15 +172,11 @@ module ActsAsSolr #:nodoc:
           end
         end
         #Remove the unitary ranges that are not original range edges
-        puts "BEFORE CLEAN: "+ranges.inspect
         ranges = ranges.select do | r |
           !( r.length == 0 && (
               r.first != original_range.first && r.last != original_range.last))
         end
-        puts "AFTER CLEAN: "+ranges.inspect
-        puts filters.inspect
       end
-      puts "EEEEEEEEEEEEEEEEEEEEEEND\n"
       "( " + filters.join( " OR " ) + " )"
     end
     
