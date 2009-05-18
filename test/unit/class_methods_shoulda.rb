@@ -261,20 +261,23 @@ class ClassMethodsTest < Test::Unit::TestCase
       assert result.scan(/ OR /).size == 1
     end
     
-    context "sliced twice" do
+    context "sliced N times" do
       setup do
-        stubs(:configuration).returns( {:solr_fields => { :lat => { :type => :range_double, :sliced => 2 } } } )
+        stubs(:configuration).returns( {:solr_fields => { :lat => 
+                { :type => :range_double, :sliced => [4,10] } } } )
       end
         
       should "query usual range" do
-        result = range_query( "lat" , 1.123456 , 10.345678 )
-        assert_include( "lat_rd:[1.123456 TO 1.1235]", result) # 1.123456 to 123500...
-        assert_include( "lat_4d_rd:[1.1235 TO 1.9999]", result) # gets 1.1235000 to 2.000099...
-        assert_include( "lat_ri:[2 TO 9]", result) #gets 2.000... to 9.99999
-        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.3455\]/, result) # gets 10.000... to 10.3455999..
-        assert_include( "lat_rd:[10.3456 TO 10.345678]", result)
-        assert result.scan(/lat_/).size == 5
-        assert result.scan(/ OR /).size == 4
+        result = range_query( "lat" , "1.123456789012345" , "10.345678123456789012345" )
+        assert_include( "lat_rd:[1.123456789012345 TO 1.1234567891]", result)
+        assert_include( "lat_10d_rd:[1.1234567891 TO 1.1234999999]", result)
+        assert_include( "lat_4d_rd:[1.1235 TO 1.9999]", result)
+        assert_include( "lat_ri:[2 TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.3455\]/, result)
+        assert_include( /lat_10d_rd\:\[10\.3456(0+)? TO 10\.3456781233\]/, result)
+        assert_include( "lat_rd:[10.3456781234 TO 10.345678123456789012345]", result)
+        assert result.scan(/lat_/).size == 7
+        assert result.scan(/ OR /).size == 6
       end
       
       should "query starts with int and end is not enough precise" do
@@ -337,7 +340,7 @@ class ClassMethodsTest < Test::Unit::TestCase
         assert result.scan(/lat_/).size == 2, result
         assert result.scan(/ OR /).size == 1, result
       end
-  
+
       should "work with open start range" do
         result = range_query( "lat" , "*", 10.7 )
         assert_include("lat_ri:[* TO 9]", result)
@@ -346,7 +349,128 @@ class ClassMethodsTest < Test::Unit::TestCase
         assert result.scan(/lat_/).size == 3
         assert result.scan(/ OR /).size == 2
       end
-    end      
+
+      should "work with open end range long" do
+        result = range_query( "lat" , "10.712345678901" , "*" )
+        assert_include( "lat_rd:[10.712345678901 TO 10.712345679]", result)
+        assert_include( "lat_10d_rd:[10.712345679 TO 10.7123999999]", result)
+        assert_include( "lat_4d_rd:[10.7124 TO 10.9999]", result)
+        assert_include( "lat_ri:[11 TO *]", result)
+        assert result.scan(/lat_/).size == 4, result
+        assert result.scan(/ OR /).size == 3, result
+      end
+
+      should "work with open start range long" do
+        result = range_query( "lat" , "*", "10.712345678901" )
+        assert_include("lat_ri:[* TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(.0+)? TO 10\.7122\]/, result)
+        assert_include( /lat_10d_rd\:\[10\.7123 TO 10\.7123456788\]/, result)
+        assert_include( "lat_rd:[10.7123456789 TO 10.712345678901]", result)
+        assert result.scan(/lat_/).size == 4
+        assert result.scan(/ OR /).size == 3
+      end
+
+      should "only 10 decimals part used and full field" do
+        result = range_query( "lat", "1.12345678", "1.12345679")
+        assert_include( /lat_10d_rd\:\[1\.12345678 TO 1\.1234567899\]/, result)
+        assert_include( /lat_rd\:\[1\.12345679 TO 1\.12345679\]/, result)
+      end
+
+      should " allow diferent float depths " do
+        result = range_query( "lat", "1.12345678", "1.1234567912345")
+        assert_include( /lat_10d_rd\:\[1\.12345678 TO 1\.1234567911\]/, result)
+        assert_include( /lat_rd\:\[1\.1234567912 TO 1\.1234567912345\]/, result)
+      end
+      
+    end
+    
+    context "sliced twice" do
+      setup do
+        stubs(:configuration).returns( {:solr_fields => { :lat => { :type => :range_double, :sliced => 2 } } } )
+      end
+
+      should "query usual range" do
+        result = range_query( "lat" , 1.123456 , 10.345678 )
+        assert_include( "lat_rd:[1.123456 TO 1.1235]", result) # 1.123456 to 123500...
+        assert_include( "lat_4d_rd:[1.1235 TO 1.9999]", result) # gets 1.1235000 to 2.000099...
+        assert_include( "lat_ri:[2 TO 9]", result) #gets 2.000... to 9.99999
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.3455\]/, result) # gets 10.000... to 10.3455999..
+        assert_include( "lat_rd:[10.3456 TO 10.345678]", result)
+        assert result.scan(/lat_/).size == 5
+        assert result.scan(/ OR /).size == 4
+      end
+
+      should "query starts with int and end is not enough precise" do
+        result = range_query( "lat" , 1.0 , 10.3 )
+        assert_include( "lat_ri:[1 TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.2999\]/, result)
+        assert_include( "lat_rd:[10.3 TO 10.3]", result)
+        assert result.scan(/lat_/).size == 3
+        assert result.scan(/ OR /).size == 2
+      end
+
+      should "query ends with int" do
+        result = range_query( "lat" , 1.8 , 10 )
+        #Don't use lat_rd at start 'cause the start does not have more than 4 decimals
+        assert_include( "lat_4d_rd:[1.8 TO 1.9999]", result) #gets from 1.80 to 2.000099999...
+        assert_include( "lat_ri:[2 TO 9]", result) # gets from 3.0 to 9.9999...
+         # a Needed strange range to include the value 10
+        assert_include( "lat_rd:[10.0 TO 10.0]", result)
+        assert result.scan(/lat_/).size == 3, result
+        assert result.scan(/ OR /).size == 2, result
+      end
+
+      should "query no range" do
+        result = range_query( "lat" , 1.8 , 1.8 )
+        assert_include( "lat_rd:[1.8 TO 1.8]", result)
+        assert result.scan(/lat_rd/).size == 1
+        assert result.scan(/ OR /).size == 0
+      end
+
+      should "query no int part used" do
+        result = range_query( "lat" , 1.8 , 1.9 )
+        assert_include( "lat_4d_rd:[1.8 TO 1.8999]", result)
+        assert_include( "lat_rd:[1.9 TO 1.9]", result)
+        assert result.scan(/lat_/).size == 2
+        assert result.scan(/ OR /).size == 1
+      end
+
+      should "query reverse range is reverted" do
+        result = range_query( "lat" , 1.7 , 1.2 )
+        assert_include( "lat_4d_rd:[1.2 TO 1.6999]", result)
+        assert_include( "lat_rd:[1.7 TO 1.7]", result)
+        assert result.scan(/lat_/).size == 2
+        assert result.scan(/ OR /).size == 1
+      end
+
+      should "reverse the range and work as ususal" do
+        result = range_query( "lat" , 10.7 , 1.2 )
+        assert_include( "lat_4d_rd:[1.2 TO 1.9999]", result)
+        assert_include( "lat_ri:[2 TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(\.0+)? TO 10\.6999\]/, result)
+        assert_include( "lat_rd:[10.7 TO 10.7]", result)
+        assert result.scan(/lat_/).size == 4
+        assert result.scan(/ OR /).size == 3
+      end
+
+      should "work with open end range" do
+        result = range_query( "lat" , 10.7 , "*" )
+        assert_include( "lat_4d_rd:[10.7 TO 10.9999]", result)
+        assert_include( "lat_ri:[11 TO *]", result)
+        assert result.scan(/lat_/).size == 2, result
+        assert result.scan(/ OR /).size == 1, result
+      end
+
+      should "work with open start range" do
+        result = range_query( "lat" , "*", 10.7 )
+        assert_include("lat_ri:[* TO 9]", result)
+        assert_include( /lat_4d_rd\:\[10(.0+)? TO 10\.6999\]/, result)
+        assert_include( "lat_rd:[10.7 TO 10.7]", result)
+        assert result.scan(/lat_/).size == 3
+        assert result.scan(/ OR /).size == 2
+      end
+    end
+
   end
   
 end

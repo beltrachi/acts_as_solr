@@ -101,7 +101,9 @@ module ActsAsSolr #:nodoc:
         filters << _range_query( field_name, v[2], 
           v[3], field ) unless v[2] == "*" 
         "( " + filters.join( " OR " ) + " )"
-      else #slices == 2
+      elsif slices.respond_to?( :each )
+        n_sliced_double_range_query( field_name, startsat, endsat, field )
+      else
         n_sliced_double_range_query( field_name, startsat, endsat, field )
       end
     end
@@ -110,21 +112,20 @@ module ActsAsSolr #:nodoc:
     # Taking advantage of the fields available
     def n_sliced_double_range_query( field_name, startsat, endsat, field )
       filters = []
-      # Int field type
-      int_field = field.dup
-      int_field[1] = int_field[1].dup
-      int_field[1][:type] = :range_integer
-      int_field[1].delete(:sliced)
       openstart = startsat == "*"
       openend = endsat == "*"
+      slices = rd_slice_list( field, field_name )
+      startsat = BigDecimal.new( startsat.to_s ) unless openstart
+      endsat = BigDecimal.new( endsat.to_s ) unless openend
+
       range = if ( openstart || openend ) then
         if openstart && !openend then
-          filters << _range_query( field_name+"_ri", 
-            "*", endsat.floor - 1 , int_field)
+          filters << _range_query( field_name+"_ri",
+            "*", (endsat.floor - 1).to_i , slices.last[1] )
           ( endsat.floor.to_f .. endsat )
         elsif !openstart && openend 
           filters << _range_query( field_name+"_ri", 
-            startsat.ceil,  "*", int_field)
+            startsat.ceil.to_i,  "*", slices.last[1] )
           ( startsat .. startsat.ceil.to_f )
         else
           nil #If the range is totally open, we don't need to filter anything
@@ -135,11 +136,6 @@ module ActsAsSolr #:nodoc:
       return if range.nil?
       range = FloatRange.new( range.first, range.last)
       #Bucle to eat the range
-      # The numbers are the number of decimals for each field
-      slices = [ 
-        [ 0, int_field, field_name+"_ri"],
-        [ 4, field, field_name+"_4d_rd"],
-        [ :all, field, field_name ] ]
       ranges = [ range ]
       original_range = range
       while ranges.size > 0 do
@@ -177,14 +173,35 @@ module ActsAsSolr #:nodoc:
       end
       "( " + filters.join( " OR " ) + " )"
     end
+
+    #Construct the slice list
+    def rd_slice_list( field, field_name )
+      slice = field[1][:sliced]
+      # Int field type
+      int_field = field.dup
+      int_field[1] = int_field[1].dup
+      int_field[1][:type] = :range_integer
+      int_field[1].delete(:sliced)
+
+      res = [ [ 0, int_field, field_name+"_ri"] ]
+      if slice == 2
+        slice = [ 4 ]
+      end
+      slice.each do |d|
+        res << [ d, field, field_name+"_#{d}d_rd"]
+      end
+      res << [ :all, field, field_name ]
+      res
+    end
     
     class FloatRange < Range
 
-      def new( first, last )
-        first = first.to_f if first.respond_to?(:to_f)
-        last = last.to_f if last.respond_to?(:to_f)
+      def initialize( first, last )
+        first = BigDecimal.new( first.to_s ) if first != "*"
+        last = BigDecimal.new( last.to_s ) if last != "*"
         super( first, last)
       end
+      
       def length
         self.last - self.first 
       end
@@ -217,8 +234,12 @@ module ActsAsSolr #:nodoc:
       
       def range_covered_by_decimals( d )
         return self if d == :all
-        move = 10.0**d
-        pair = [(self.first * move).ceil / move, 
+        move = BigDecimal.new("10.0") ** d.to_i
+        if !(self.first * move).respond_to? :ceil
+          require "ruby-debug"
+          debugger
+        end
+        pair = [ (self.first * move).ceil / move,
           (self.last * move).floor / move ]
         self.class.new( *pair ) unless pair[0] > pair[1]
       end
