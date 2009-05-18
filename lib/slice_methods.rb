@@ -110,8 +110,6 @@ module ActsAsSolr #:nodoc:
     # Taking advantage of the fields available
     def n_sliced_double_range_query( field_name, startsat, endsat, field )
       filters = []
-      base = 10000.0
-      lsb4d = 1 / 10000.0
       # Int field type
       int_field = field.dup
       int_field[1] = int_field[1].dup

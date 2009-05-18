@@ -92,14 +92,33 @@ module ActsAsSolr #:nodoc:
     def add_slices_to_doc( field_type, options, field_name, doc, value, solr_name )
       case field_type
         when :range_double, "rd"
-          raise "Only sliced 1 supported" if options[:sliced] > 2
+          raise "Only sliced 1..2 supported" if !options.respond_to?( :each ) &&
+            options[:sliced] > 2
           #Store the int part in a new field
           newop = options.dup
           newop.delete( :sliced )
           newop[:type] = :range_integer
           newvalue = ( !value.blank? ? value.to_i : value)
           add_field_to_doc( "ri", newop, field_name, doc, newvalue, solr_name )
-          if options[:sliced] > 1 && !value.blank?
+          value = BigDecimal.new( value.to_s ) unless value == "" || value.nil?
+          if options[:sliced].respond_to?( :each ) && !value.blank?
+            options[:sliced].each do |dec|
+              #Add field with dec decimals
+              truncated = []
+              value = BigDecimal.new( value.to_s )
+              value.to_s.split(".").each_with_index do |e, i|
+                truncated << if i == 0
+                   e
+                else
+                  e[ 0 .. (dec-1) ]
+                end
+              end
+              truncated = BigDecimal.new( truncated.join(".") )
+              add_field_to_doc( "rd", newop, field_name, doc,
+                truncated,
+                (solr_name.to_s+"_#{dec}d").to_sym )
+            end
+          elsif options[:sliced] == 2 && !value.blank?
             newop[:type] = :range_double
             add_field_to_doc( "rd", newop, field_name, doc, 
               ((value * 10000).to_i / 10000.0), 
