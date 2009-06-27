@@ -30,6 +30,7 @@ end
 class Test::Unit::TestCase
   def self.fixtures(*table_names)
     fixture_path = defined?(ActiveSupport::TestCase) ? ActiveSupport::TestCase.fixture_path : Test::Unit::TestCase.fixture_path
+    fixture_path = File.join( File.dirname( __FILE__), 'fixtures') unless fixture_path
     if block_given?
       Fixtures.create_fixtures(fixture_path, table_names) { yield }
     else
