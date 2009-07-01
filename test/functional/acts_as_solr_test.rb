@@ -259,12 +259,12 @@ class ActsAsSolrTest < Test::Unit::TestCase
     records = Electronic.find_by_solr 'audiobooks OR latency'
     assert records.docs.empty?
     assert_equal 0, records.total
-  
-    assert_nothing_raised{
+    
+    begin
       records = Electronic.find_by_solr 'features:audiobooks'
-      assert records.docs.empty?
-      assert_equal 0, records.total
-    }
+    rescue Exception => e
+    end
+    assert_not_nil e
   end
   
   # Testing the :auto_commit option set to false in the model
@@ -312,11 +312,10 @@ class ActsAsSolrTest < Test::Unit::TestCase
   def test_find_by_solr_with_score
     books = Book.find_by_solr 'ruby^10 OR splinter', :scores => true
     assert_equal 2, books.total
-    assert_equal 0.41763234, books.max_score
+    assert books.max_score > 0.00
     
     books.records.each { |book| assert_not_nil book.solr_score }
-    assert_equal 0.41763234, books.docs.first.solr_score
-    assert_equal 0.14354616, books.docs.last.solr_score
+    assert books.docs.first.solr_score > books.docs.last.solr_score
   end
   
   # Making sure nothing breaks when html entities are inside
@@ -386,11 +385,15 @@ class ActsAsSolrTest < Test::Unit::TestCase
   def test_find_by_solr_order_by_score
     books = Book.find_by_solr 'ruby^10 OR splinter', {:scores => true, :order => 'score asc' }
     assert (books.docs.collect(&:solr_score).compact.size == books.docs.size), "Each book should have a score"
-    assert_equal 0.41763234, books.docs.last.solr_score
+    
+    raw_scores = books.docs.collect(&:solr_score)
+    assert_equal raw_scores, raw_scores.sort
+     
     
     books = Book.find_by_solr 'ruby^10 OR splinter', {:scores => true, :order => 'score desc' }
-    assert_equal 0.41763234, books.docs.first.solr_score
-    assert_equal 0.14354616, books.docs.last.solr_score
+    raw_scores = books.docs.collect(&:solr_score)
+    assert_equal raw_scores, raw_scores.sort.reverse
+    
   end
   
   # Search based on fields with the :date format

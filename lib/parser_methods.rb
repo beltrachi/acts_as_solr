@@ -11,7 +11,7 @@ module ActsAsSolr #:nodoc:
       query_options = {}
       return nil if (query.nil? || query.strip == '')
       raise "Invalid parameters: #{(options.keys - valid_options).map(&:inspect).join(',')}" unless (options.keys - valid_options).empty?
-      
+
       begin
         Deprecation.validate_query(options)
         query_options[:start] = options[:offset]
