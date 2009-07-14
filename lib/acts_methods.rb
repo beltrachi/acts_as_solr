@@ -110,6 +110,25 @@ module ActsAsSolr #:nodoc:
     #                    supplied, it will be called once for each object with the object as the only argument
     #           :multivalued:: Index the associated objects using one field for each object rather than joining them
     #                          all into a single field
+    #           :sliced:: Index the date or range_double fields in sliced fields
+    #                     in order to speed up range searches.
+    #
+    #                     A date field accept the value 1 which saves the date
+    #                     in two formats, a datetime and a date without time.
+    #
+    #                     A range_double field is split in it's integer part and
+    #                     any chunked decimals parts.
+    #
+    #                     { :lat => {:type => :range_double, :sliced => [ 4, 10 ]
+    #                     The field lat will be saved in 4 fields:
+    #                       lat_rd: the full value
+    #                       lat_ri: the integer part
+    #                       lat_4d_rd: the value with four decimals
+    #                       lat_10d_rd: the value with ten decimals
+    #                     
+    #                     The searches which use this value using the range_query
+    #                     method will generate a solr query that uses the partial
+    #                     fields to speed up the searches
     #
     # facets:: This option can be used to specify the fields you'd like to
     #          index as facet fields

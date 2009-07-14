@@ -28,8 +28,8 @@ module ActsAsSolr #:nodoc:
           # override the :zeros (it's deprecated anyway) if :mincount exists
           query_options[:facets][:mincount] = options[:facets][:mincount] if options[:facets][:mincount]
           query_options[:facets][:fields] = options[:facets][:fields].collect{|k| "#{k}_facet"} if options[:facets][:fields]
-          query_options[:filter_queries] = replace_types([*options[:facets][:browse]].collect{|k| "#{k.sub!(/ *: */,"_facet:")}"}) if options[:facets][:browse]
-          query_options[:facets][:queries] = replace_types(options[:facets][:query].collect{|k| "#{k.sub!(/ *: */,"_t:")}"}) if options[:facets][:query]
+          query_options[:filter_queries] = replace_types([*options[:facets][:browse]].collect{|k| "#{k.sub!(/ *: */ ,"_facet:")}"}) if options[:facets][:browse]
+          query_options[:facets][:queries] = replace_types(options[:facets][:query].collect{|k| "#{k.sub!(/ *: */ ,"_t:")}"}) if options[:facets][:query]
           
           
           if options[:facets][:dates]
@@ -53,7 +53,7 @@ module ActsAsSolr #:nodoc:
             query_options[:date_facets][:end]     = options[:facets][:dates][:end] if options[:facets][:dates][:end]
             query_options[:date_facets][:gap]     = options[:facets][:dates][:gap] if options[:facets][:dates][:gap]
             query_options[:date_facets][:hardend] = options[:facets][:dates][:hardend] if options[:facets][:dates][:hardend]
-            query_options[:date_facets][:filter]  = replace_types([*options[:facets][:dates][:filter]].collect{|k| "#{k.sub!(/ *:(?!\d) */,"_d:")}"}) if options[:facets][:dates][:filter]
+            query_options[:date_facets][:filter]  = replace_types([*options[:facets][:dates][:filter]].collect{|k| "#{k.sub!(/ *:(?!\d) */ ,"_d:")}"}) if options[:facets][:dates][:filter]
 
             if options[:facets][:dates][:other]
               validate_date_facet_other_options(options[:facets][:dates][:other])
@@ -72,7 +72,6 @@ module ActsAsSolr #:nodoc:
         end
         
         query_options[:field_list] = [field_list, 'score']
-        
         unless query.nil? || query.empty? || query == '*'
           query = "(#{map_query_to_fields(query)}) AND #{models}"
         else
@@ -103,7 +102,7 @@ module ActsAsSolr #:nodoc:
     # "title:(a fish in my head)" => "title_t:(a fish in my head)"
     # it should avoid mapping to _sort fields
     def map_query_to_fields(query)
-      #{query.gsub(/ *: */,"_t:")}
+      # {query.gsub(/ *: */,"_t:")}
       query.gsub(/(\w+)\s*:\s*/) do |match| # sets $1 in the block
         field_name = $1
         field_name = field_name_to_lucene_field(field_name)
@@ -248,13 +247,16 @@ module ActsAsSolr #:nodoc:
     # or pass it :text if that's your prefered type
     def field_name_to_solr_field(field_name, favoured_types=nil)
       favoured_types = Array(favoured_types)
-
       solr_fields = configuration[:solr_fields].select do |field, options|
         field.to_s == field_name.to_s
+      end
+      if configuration[:facets] && configuration[:facets].include?( field_name.to_sym )
+        solr_fields = { field_name => { :type => :facet } }
       end
       prefered, secondary = solr_fields.partition do |field, options|
         favoured_types.include?(options[:type])
       end
+      
       prefered.first || secondary.first # will return nil if no matches
     end
     

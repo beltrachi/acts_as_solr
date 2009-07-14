@@ -149,6 +149,7 @@ module ActsAsSolr #:nodoc:
           data = options[:multivalued] ? [] : ""
           field_name = options[:as] || association.to_s.singularize
           field_type = get_solr_field_type(options[:type])
+          field_type = :facet if configuration[:facets] && configuration[:facets].include?( field_name )
           field_boost = options[:boost] || solr_configuration[:default_boost]
           suffix = get_solr_field_type(field_type)
           case self.class.reflect_on_association(association).macro

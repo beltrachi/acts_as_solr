@@ -2,7 +2,6 @@ module ActsAsSolr #:nodoc:
   
   module SliceMethods
     
-    private
     def date_range_query( field_name, startsat, endsat, field )
       #Range not sliceable
       if startsat != "*" && endsat != "*"
@@ -45,12 +44,6 @@ module ActsAsSolr #:nodoc:
       "( " + filters.join( " OR " ) + " )"
     end
     
-    def _range_query( field_name, startsat, endsat, field )
-      range = [ startsat, endsat ].map{|v| v.respond_to?( :to_solr ) ? v.to_solr : v }
-      map_query_to_fields( "#{field_name}:[#{ range[0] } TO #{ range[1] }]" )
-    end
-    
-    
     # Returns the query range to be added to the query
     def range_query( field_name, startsat, endsat )
       field = field_name_to_solr_field( field_name )
@@ -69,6 +62,11 @@ module ActsAsSolr #:nodoc:
     end
     
     private
+    def _range_query( field_name, startsat, endsat, field )
+      range = [ startsat, endsat ].map{|v| v.respond_to?( :to_solr ) ? v.to_solr : v }
+      map_query_to_fields( "#{field_name}:[#{ range[0] } TO #{ range[1] }]" )
+    end
+    
     def double_range_query( field_name, startsat, endsat, field )
       slices = field[1][:sliced]
       if startsat != "*" && endsat != "*"
@@ -143,6 +141,9 @@ module ActsAsSolr #:nodoc:
         ranges_it.each_with_index do |range, idx|
           sliced = false
           slices.each do |dec, f, fn |
+            # dec: number of decimals
+            # f: field type data
+            # fn: field name
             unless sliced
               # See if the range have some parts that can be eaten by this dec
               if range.has_a_part_of( dec ) then
@@ -152,13 +153,14 @@ module ActsAsSolr #:nodoc:
                 ranges += ranges2.compact
                 offset = 0
                 offset = 1.0 / 10**dec unless dec == :all
+                offset = BigDecimal.new( offset.to_s )
                 if dec == 0
                   filters << _range_query( fn, rc.first.to_i, (rc.last - offset).to_i, f )
                 else
                   filters << _range_query( fn, rc.first, rc.last - offset, f )
                 end
                 if offset > 0.0 && (!openend || (openend && rc.last != original_range.last) )
-                  ranges << FloatRange.new( rc.last, rc.last ) if offset > 0.0
+                  ranges << FloatRange.new( rc.last, rc.last )
                 end
                 sliced = true
               end
@@ -184,12 +186,14 @@ module ActsAsSolr #:nodoc:
       int_field[1].delete(:sliced)
 
       res = [ [ 0, int_field, field_name+"_ri"] ]
+      # TODO: slice=>2 should be deprecated on next version
       if slice == 2
         slice = [ 4 ]
       end
       slice.each do |d|
         res << [ d, field, field_name+"_#{d}d_rd"]
       end
+      # The field with no truncates (the full value)
       res << [ :all, field, field_name ]
       res
     end

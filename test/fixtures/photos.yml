@@ -1,0 +1,37 @@
+# CAUTION: fixtures seem to not load float lat and lng correctly. They are rounded
+# to int
+#   NW  NE
+#
+#   SW  SE
+north_west:
+  id: 1
+  category_id: 1
+  name: Barcelona
+  author_id: 1
+  taken_on: <%= Date.today - 1.days %>
+  lng: 10.00
+  lat: 10.00
+north_east:
+  id: 2
+  category_id: 2
+  name: Istambul
+  author_id: 2
+  taken_on: <%= Date.today - 2.days %>
+  lng: 20.0000
+  lat: 10.0000
+south_east:
+  id: 3
+  category_id: 2
+  name: Africa
+  author_id: 2
+  taken_on: <%= Date.today - 2.days %>
+  lng: 20.0000
+  lat: 20.0000
+south_west:
+  id: 4
+  category_id: 2
+  name: India
+  author_id: 2
+  taken_on: <%= Date.today - 3.days %>
+  lng: 10.0000
+  lat: 20.0000

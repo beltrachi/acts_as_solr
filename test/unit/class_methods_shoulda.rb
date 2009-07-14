@@ -382,6 +382,12 @@ class ClassMethodsTest < Test::Unit::TestCase
         assert_include( /lat_rd\:\[1\.1234567912 TO 1\.1234567912345\]/, result)
       end
       
+      should " ask for value from 5 to 24 " do
+        result = range_query( "lat", 5.0, 24.0 )
+        assert_include( /lat_ri\:\[5 TO 23\]/, result )
+        assert_include( /lat_rd\:\[24(.0+)? TO 24(.0+)?\]/, result )
+      end
+      
     end
     
     context "sliced twice" do
