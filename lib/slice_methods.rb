@@ -239,10 +239,6 @@ module ActsAsSolr #:nodoc:
       def range_covered_by_decimals( d )
         return self if d == :all
         move = BigDecimal.new("10.0") ** d.to_i
-        if !(self.first * move).respond_to? :ceil
-          require "ruby-debug"
-          debugger
-        end
         pair = [ (self.first * move).ceil / move,
           (self.last * move).floor / move ]
         self.class.new( *pair ) unless pair[0] > pair[1]
