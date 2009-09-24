@@ -3,7 +3,7 @@ require "#{File.dirname(File.expand_path(__FILE__))}/../test_helper"
 
 class ActsAsSolrTest < Test::Unit::TestCase
   
-  fixtures :books, :movies, :electronics, :postings, :authors
+  fixtures :books, :movies, :electronics, :postings, :authors, :tags
 
   # Inserting new data into Solr and making sure it's getting indexed
   def test_insert_new_data
