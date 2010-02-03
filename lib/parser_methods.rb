@@ -7,7 +7,8 @@ module ActsAsSolr #:nodoc:
     # Method used by mostly all the ClassMethods when doing a search
     def parse_query(query=nil, options={}, models=nil)
       options = options.symbolize_keys
-      valid_options = [:offset, :limit, :facets, :models, :results_format, :order, :scores, :operator, :include, :lazy]
+      valid_options = [:offset, :limit, :facets, :models, :results_format, 
+        :order, :scores, :operator, :include, :lazy, :filter_queries]
       query_options = {}
       return nil if (query.nil? || query.strip == '')
       raise "Invalid parameters: #{(options.keys - valid_options).map(&:inspect).join(',')}" unless (options.keys - valid_options).empty?
@@ -17,6 +18,7 @@ module ActsAsSolr #:nodoc:
         query_options[:start] = options[:offset]
         query_options[:rows] = options[:limit]
         query_options[:operator] = options[:operator]
+        query_options[:filter_queries] = [options[:filter_queries]].compact
         
         # first steps on the facet parameter processing
         if options[:facets]
@@ -28,7 +30,8 @@ module ActsAsSolr #:nodoc:
           # override the :zeros (it's deprecated anyway) if :mincount exists
           query_options[:facets][:mincount] = options[:facets][:mincount] if options[:facets][:mincount]
           query_options[:facets][:fields] = options[:facets][:fields].collect{|k| "#{k}_facet"} if options[:facets][:fields]
-          query_options[:filter_queries] = replace_types([*options[:facets][:browse]].collect{|k| "#{k.sub!(/ *: */ ,"_facet:")}"}) if options[:facets][:browse]
+          # WHY??!?! is it not enough to filter the facets???
+          query_options[:filter_queries] << replace_types([*options[:facets][:browse]].collect{|k| "#{k.sub!(/ *: */ ,"_facet:")}"}) if options[:facets][:browse]
           query_options[:facets][:queries] = replace_types(options[:facets][:query].collect{|k| "#{k.sub!(/ *: */ ,"_t:")}"}) if options[:facets][:query]
           
           
@@ -64,16 +67,16 @@ module ActsAsSolr #:nodoc:
         end
         
         if models.nil?
-          # TODO: use a filter query for type, allowing Solr to cache it individually
-          models = "#{solr_type_condition}"
+          query_options[:filter_queries] << solr_type_condition
           field_list = solr_configuration[:primary_key_field]
         else
           field_list = "id"
+          query_options[:filter_queries] << models
         end
         
         query_options[:field_list] = [field_list, 'score']
         unless query.nil? || query.empty? || query == '*'
-          query = "(#{map_query_to_fields(query)}) AND #{models}"
+          query = "(#{map_query_to_fields(query)})"
         else
           query = "#{models}"
         end
@@ -85,7 +88,8 @@ module ActsAsSolr #:nodoc:
           order = map_order_to_fields(options[:order])
           query_options[:query] << ';' << order
         end
-        
+        query_options[:filter_queries] = map_query_to_fields(
+          query_options[:filter_queries].map{|c|"(#{c})"}.join(" AND ") )
         ActsAsSolr::Post.execute(Solr::Request::Standard.new(query_options))
       rescue
         raise "There was a problem executing your search: #{$!} in #{$!.backtrace.first}"

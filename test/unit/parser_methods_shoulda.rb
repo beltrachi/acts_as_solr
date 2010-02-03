@@ -201,7 +201,7 @@ class ParserMethodsTest < Test::Unit::TestCase
     
       should "add the type" do
         ActsAsSolr::Post.expects(:execute).with {|request|
-          request.to_hash[:q].include?("(type:ParserMethodsTest)")
+          request.to_hash[:fq].include?("(type:ParserMethodsTest)")
         }
         @parser.parse_query "foo"
       end
