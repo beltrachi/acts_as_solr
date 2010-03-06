@@ -57,7 +57,7 @@ class Solr::Request::Standard < Solr::Request::Select
     # common parameter processing
     hash[:start] = @params[:start]
     hash[:rows] = @params[:rows]
-    hash[:fq] = @params[:filter_queries]
+    hash[:fq] = [@params[:filter_queries]]
     hash[:fl] = @params[:field_list].join(',')
     hash[:debugQuery] = @params[:debug_query]
     hash[:explainOther] = @params[:explain_other]
