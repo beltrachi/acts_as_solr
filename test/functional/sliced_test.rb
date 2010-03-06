@@ -70,4 +70,10 @@ class SlicedTest < Test::Unit::TestCase
     photos = Photo.find_by_solr( Photo.range_query( 'lat', 10.123, 10.123456789 ) )
     assert_equal [ p ], photos.docs
   end
+
+  def test_search_on_last_day_of_month
+    photos = Photo.find_by_solr(
+      Photo.range_query( 'taken_on', Time.parse("2008/01/31 11:00:00"), Time.parse("2008/01/31 11:00:00") + 2.weeks ) )
+    assert_equal 0, photos.total
+  end
 end
