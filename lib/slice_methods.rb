@@ -15,7 +15,7 @@ module ActsAsSolr #:nodoc:
       else
         t = (startsat.respond_to?( :utc )? startsat.utc : Time.parse(startsat).utc )
         pad = ( t.hour== 0 && t.min == 0 && t.sec == 0 ? 0 : 1 )
-        Time.utc( t.year, t.month, t.day + pad)
+        Time.utc( t.year, t.month, t.day ) + pad.days
       end
       endsat_day = if endsat == "*" || endsat.blank?
         endsat
