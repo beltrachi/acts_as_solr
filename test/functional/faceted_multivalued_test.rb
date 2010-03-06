@@ -9,7 +9,6 @@ class FacetedMultivaluedTest < Test::Unit::TestCase
   def test_insert_new_data
     tag_photos
     doc = Photo.find(1).to_solr_doc.to_xml.to_s
-    puts doc
     [/>BCN</, />city</].each do | needle |
       assert_match( needle, doc )
     end
@@ -68,10 +67,7 @@ class FacetedMultivaluedTest < Test::Unit::TestCase
       p = Photo.find(data[:id])
       tags = data[:tags].collect do |tagname|
         t = Tag.find_by_name(tagname) || Tag.create(:name => tagname)
-        pp t
-        pp p.tags
         p.tags << t
-        pp p.tags
       end
       p.save!
     end
